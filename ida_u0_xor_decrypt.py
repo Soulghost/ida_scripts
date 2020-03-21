@@ -179,7 +179,7 @@ handlers = {
 # simulator memory
 memory = {}
 
-def u0_xorpath(startAddr, endAddr):
+def u0_xorpatch(startAddr, endAddr):
     if endAddr < startAddr:
         raise Exception('invalid input params')
     print('xorpath from {} to {}'.format(hex(startAddr), hex(endAddr)))
@@ -195,4 +195,4 @@ def u0_xorpath(startAddr, endAddr):
         cursor += 4
 
 if __name__ == '__main__':
-    u0_xorpath(0x10007A928, 0x10007BC7C)
+    u0_xorpatch(0x10007A928, 0x10007BC7C)
