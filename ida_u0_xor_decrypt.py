@@ -26,13 +26,13 @@ def handle_add(addr):
     result += get_operand_value(addr, op2, 2)
     store_reg(dstReg, result)
 
-def handle_ldrb(addr):
+def handle_ldr(addr):
     dstRegOp = GetOpnd(addr, 0)
     srcOp = GetOpnd(addr, 1)
     srcAddr, _ = get_operand_indirect_addr(srcOp)
     store_reg(dstRegOp, Byte(srcAddr))
 
-def handle_strb(addr):
+def handle_str(addr):
     srcRegOp = GetOpnd(addr, 0)
     dstOp = GetOpnd(addr, 1)
     dstAddr, isStatic = get_operand_indirect_addr(dstOp)
@@ -49,6 +49,12 @@ def handle_mov(addr):
     srcValue = get_operand_value(addr, src, 1)
     store_reg(dstRegOp, srcValue)
 
+def handle_mvn(addr):
+    dstRegOp = GetOpnd(addr, 0)
+    src = GetOpnd(addr, 1)
+    srcValue = get_operand_value(addr, src, 1)
+    store_reg(dstRegOp, not srcValue)
+
 def handle_eor(addr):
     dstRegOp = GetOpnd(addr, 0)
     op1 = GetOpnd(addr, 1)
@@ -57,7 +63,10 @@ def handle_eor(addr):
     val2 = get_operand_value(addr, op2, 2)
     val = val1 ^ val2
     store_reg(dstRegOp, val)
-    print('[+] ================> (╯°□°）╯︵ ┻━┻ decrypted eor value ' + str(val) + ', ' + chr(val))
+    if val >= 0 and val <= 255:
+        print('[+] ================> (╯°□°）╯︵ ┻━┻ decrypted eor value ' + str(val) + ', ' + chr(val))
+    else:
+        print('[+] ================> (╯°□°）╯︵ ┻━┻ decrypted eor value ' + str(val))
 
 def handle_and(addr):
     dstRegOp = GetOpnd(addr, 0)
@@ -91,7 +100,7 @@ def handle_ldur(addr):
     store_reg(dstRegOp, value)
 
 def get_operand_value(addr, operand, num):
-    if operand.startswith('X') or operand.startswith('W'):
+    if operand.startswith('X') or operand.startswith('W') or operand.startswith('D'):
         reg = x[int(operand[1:])]
         if reg.available:
             return reg.getX()
@@ -99,7 +108,15 @@ def get_operand_value(addr, operand, num):
             print('[-] invalid reg state ' + operand)
             raise Exception('[-] invalid reg state ' + operand)
     elif operand.startswith('#'):
-        return GetOperandValue(addr, num)
+        if '@PAGEOFF' in operand:
+            # print('try to eval operand ' + operand)
+            value = int('0x' + operand.split('_')[1].split('@')[0].strip(), 0) & 0xfff
+            # print('the value is ' + hex(value))
+            return value
+        elif '@PAGE' in operand:
+            raise Exception('TODO')
+        else:
+            return GetOperandValue(addr, num)
     raise Exception('unresolved operand ' + operand)
 
 def get_operand_indirect_addr(operand):
@@ -126,6 +143,7 @@ def get_operand_indirect_addr(operand):
                 imms = immPart.split(binop)
                 imm0_expr = imms[0].strip()
                 imm1_expr = imms[1].strip()
+                print('[*************] split <{}> to <{}> <{}>'.format(imms, imm0_expr, imm1_expr))
                 imm0 = get_imm_value(imm0_expr)
                 imm1 = get_imm_value(imm1_expr)
                 imm = imm0 + imm1 if binop == '+' else imm0 - imm1
@@ -146,12 +164,32 @@ def get_operand_indirect_addr(operand):
     return addr, isStatic
 
 def get_imm_value(imm_expr):
-    if '_' in imm_expr:
-        return int('0x' + imm_expr.split('_')[1], 0)
-    return int(imm_expr, 0)
+    op = None
+    if '+' in imm_expr:
+        op = '+'
+    elif '-' in imm_expr:
+        op = '-'
+    if op is None:
+        return parse_imm_op(imm_expr)
+
+    ops = imm_expr.split(op)
+    return parse_imm_op(ops[0]) + parse_imm_op(ops[1]) if op == '+' else  parse_imm_op(ops[0]) - parse_imm_op(ops[1])
+
+def parse_imm_op(imm_op):
+    if '@PAGEOFF' in imm_op:
+        print('try to eval operand ' + imm_op)
+        value = int('0x' + imm_op.split('_')[1].split('@')[0].strip(), 0) & 0xfff
+        # print('the value is ' + hex(value))
+        return value
+    elif '@PAGE' in imm_op:
+        raise Exception('TODO')
+    else:
+        if '_' in imm_op:
+            imm_op = '0x' + imm_op.split('_')[1]
+        return int(imm_op, 0)
 
 def store_reg(regOp, value):
-    if regOp.startswith('X') or regOp.startswith('W'):
+    if regOp.startswith('X') or regOp.startswith('W') or regOp.startswith('D'):
         reg = x[int(regOp[1:])]
         reg.writeX(value)
         print('[+] store {} in {}'.format(value, regOp))
@@ -167,16 +205,19 @@ x[29].writeX(0)
 handlers = {
     'ADRP': handle_adrp,
     'ADD': handle_add,
-    'LDRB': handle_ldrb,
-    'STRB': handle_strb,
+    'LDR': handle_ldr,
+    'LDRB': handle_ldr,
+    'STR': handle_str,
+    'STRB': handle_str,
     'MOV': handle_mov,
+    'MVN': handle_mvn,
     'EOR': handle_eor,
     'AND': handle_and,
     'STUR': handle_stur,
     'LDUR': handle_ldur
 }
 
-# simulator memory
+# simulator stack memory
 memory = {}
 
 def u0_xorpatch(startAddr, endAddr):
@@ -195,4 +236,4 @@ def u0_xorpatch(startAddr, endAddr):
         cursor += 4
 
 if __name__ == '__main__':
-    u0_xorpatch(0x10007A928, 0x10007BC7C)
+    u0_xorpath(0x0000000100106E98, 0x1001077d4)
