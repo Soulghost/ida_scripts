@@ -236,4 +236,4 @@ def u0_xorpatch(startAddr, endAddr):
         cursor += 4
 
 if __name__ == '__main__':
-    u0_xorpath(0x0000000100106E98, 0x1001077d4)
+    u0_xorpatch(0x0000000100106E98, 0x1001077d4)
